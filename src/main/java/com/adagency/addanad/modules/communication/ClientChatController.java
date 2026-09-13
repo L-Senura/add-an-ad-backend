@@ -11,10 +11,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class ClientChatController {
 
     @Autowired
-    private Repo repo;
+    private ChatRepo chatRepo;
 
     @PostMapping("/add")
     public ChatDB addChat(@RequestBody ChatDB e){
-        return repo.save(e);
+        return chatRepo.save(e);
     }
 }
