@@ -1,4 +1,4 @@
 package com.adagency.addanad.modules.communication;
 
-public class controller {
+public class AdminChatController {
 }
