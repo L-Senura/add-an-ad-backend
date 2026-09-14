@@ -1,4 +1,4 @@
-package com.adagency.addanad.modules.communication;
+package com.adagency.addanad.modules.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
