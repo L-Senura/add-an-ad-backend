@@ -13,61 +13,74 @@ import java.util.Optional;
 public class AdminChatController {
 
     @Autowired
-    private ChatRepo chatRepo;
+    private AdminChatRepo adminChatRepo;
+
+    @Autowired
+    private ClientChatRepo clientChatRepo;
 
     //Get client's chat details with clientID
-    @GetMapping({ "/{adminId}/client/{clientId}"})
-    public List<ChatDB> getClientMessages(@PathVariable Long clientId) {
-        return chatRepo.findByClientId(clientId);
+    @GetMapping({"/{adminId}/client/{clientId}"})
+    public List<ClientChatDB> getClientMessages(@PathVariable Long clientId) {
+        return clientChatRepo.findByClientID(clientId);
     }
 
     //Admin sends a msg to client
     @PostMapping({"/{adminId}/send/{clientId}"})
-    public ChatDB sendAdminMessageToClient(
+    public AdminChatDB sendAdminMessageToClient(
             @PathVariable Long adminId,
             @PathVariable Long clientId,
-            @RequestBody ChatDB chat) {
-        chat.setAdminId(adminId);
-        chat.setClientId(clientId);
-        return chatRepo.save(chat);
+            @RequestBody AdminChatDB chat) {
+        chat.setAdminID(adminId);
+        chat.setClientID(clientId);
+        return adminChatRepo.save(chat);
     }
 
     //Admin replies to an existing client message by adminId + clientID + client msgID
-    @PostMapping(value = "/{adminId}/{clientID}/reply/{id}")
-    public ChatDB replyChatWithAdminId(
+    @PostMapping(value = {"/{adminId}/{clientID}/reply/{clientMessageID}"})
+    public ResponseEntity<?> replyChatWithAdminId(
             @PathVariable Long adminId,
-            @PathVariable Long id,
-            @RequestBody ChatDB replyData) {
-        return chatRepo.findById(id).map(chat -> {
-            chat.setAdminId(adminId);
-            chat.setAdminMessage(replyData.getAdminMessage());
-            return chatRepo.save(chat);
-        }).orElse(null);
+            @PathVariable(required = false) Long clientID,
+            @PathVariable Long clientMessageID,
+            @RequestBody AdminChatDB replyData) {
+        Optional<ClientChatDB> clientChatOptional = clientChatRepo.findById(clientMessageID);
+        if (clientChatOptional.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Client message with ID " + clientMessageID + " not found.");
+        }
+
+        ClientChatDB clientChat = clientChatOptional.get();
+        Long effectiveClientId = (clientID != null) ? clientID : clientChat.getClientID();
+
+        replyData.setAdminID(adminId);
+        replyData.setClientID(effectiveClientId);
+        replyData.setClientMessageID(clientMessageID);
+        AdminChatDB saved = adminChatRepo.save(replyData);
+        return ResponseEntity.ok(saved);
     }
 
     //View messages sent by an Admin with adminID
     @GetMapping({"/admin/{adminId}"})
-    public List<ChatDB> getMessagesByAdminId(@PathVariable Long adminId) {
-        return chatRepo.findByAdminId(adminId);
+    public List<AdminChatDB> getMessagesByAdminId(@PathVariable Long adminId) {
+        return adminChatRepo.findByAdminID(adminId);
     }
 
-    //Admin updates he sent message by adminId and message ID
-    @PutMapping(value = {"/{adminId}/update/{id}"})
+    //Admin updates his own sent message by adminId and message ID (adminMessageID)
+    @PutMapping({"/{adminId}/update/{id}"})
     public ResponseEntity<?> updateAdminMessage(
             @PathVariable Long adminId,
             @PathVariable Long id,
-            @RequestBody ChatDB updatedData) {
-        Optional<ChatDB> chatOptional = chatRepo.findById(id);
+            @RequestBody AdminChatDB updatedData) {
+        Optional<AdminChatDB> chatOptional = adminChatRepo.findById(id);
 
         if (chatOptional.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("Message with ID " + id + " not found.");
+                    .body("Admin message with ID " + id + " not found.");
         }
 
-        ChatDB chat = chatOptional.get();
+        AdminChatDB chat = chatOptional.get();
 
-        // Ensure admin can only update messages they sent/replied to
-        if (chat.getAdminId() == null || !chat.getAdminId().equals(adminId)) {
+        // Ensure admin can only update messages they sent
+        if (chat.getAdminID() == null || !chat.getAdminID().equals(adminId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("Access denied: You can only update your own sent messages.");
         }
@@ -76,59 +89,31 @@ public class AdminChatController {
             chat.setAdminMessage(updatedData.getAdminMessage());
         }
 
-        ChatDB saved = chatRepo.save(chat);
+        AdminChatDB saved = adminChatRepo.save(chat);
         return ResponseEntity.ok(saved);
     }
-/**
-    //Admin updates his own sent message (fallback when adminId is in query param or body)
-    @PutMapping(value = {"/update/{id}"})
-    public ResponseEntity<?> updateOwnMessageWithParamOrBody(
-            @PathVariable Long id,
-            @RequestParam(required = false) Long adminId,
-            @RequestBody ChatDB updatedData) {
-        Long effectiveAdminId = (adminId != null) ? adminId : updatedData.getAdminId();
-        if (effectiveAdminId == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("Admin ID is required to verify message ownership.");
-        }
-        return updateAdminMessage(effectiveAdminId, id, updatedData);
-    }
-**/
-    //Admin deletes he sent message by adminId and message ID
+
+    //Admin deletes his own sent message by adminId and message ID (adminMessageID)
     @DeleteMapping({"/{adminId}/delete/{id}"})
     public ResponseEntity<String> deleteAdminMessage(
             @PathVariable Long adminId,
             @PathVariable Long id) {
-        Optional<ChatDB> chatOptional = chatRepo.findById(id);
+        Optional<AdminChatDB> chatOptional = adminChatRepo.findById(id);
 
         if (chatOptional.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("Message with ID " + id + " not found.");
+                    .body("Admin message with ID " + id + " not found.");
         }
 
-        ChatDB chat = chatOptional.get();
+        AdminChatDB chat = chatOptional.get();
 
-        // Ensure admin can only delete messages they sent/replied to
-        if (chat.getAdminId() == null || !chat.getAdminId().equals(adminId)) {
+        // Ensure admin can only delete messages they sent
+        if (chat.getAdminID() == null || !chat.getAdminID().equals(adminId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("Access denied: You can only delete your own sent messages.");
         }
 
-        chatRepo.delete(chat);
+        adminChatRepo.delete(chat);
         return ResponseEntity.ok("Message with ID " + id + " deleted successfully.");
     }
-
-/**
-    //Admin deletes his own sent message (fallback when adminId is passed as query param)
-    @DeleteMapping({"/delete/{id}"})
-    public ResponseEntity<String> deleteOwnMessageWithParam(
-            @PathVariable Long id,
-            @RequestParam(required = false) Long adminId) {
-        if (adminId == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("Admin ID is required as a query parameter (e.g. ?adminId=...) to verify ownership.");
-        }
-        return deleteAdminMessage(adminId, id);
-    }
- **/
 }
