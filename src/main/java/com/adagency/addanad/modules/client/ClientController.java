@@ -227,8 +227,54 @@ public class ClientController {
             });
         }
 
+        // Save entity in database with password preserved
         ClientDB saved = clientRepo.save(client);
-        saved.setPassword(null);
-        return ResponseEntity.ok(saved);
+
+        // Safe unmanaged copy for response
+        ClientDB response = new ClientDB();
+        response.setClientID(saved.getClientID());
+        response.setEmail(saved.getEmail());
+        response.setFirstName(saved.getFirstName());
+        response.setLastName(saved.getLastName());
+        response.setContactNumber(saved.getContactNumber());
+        response.setCompanyName(saved.getCompanyName());
+        response.setCompanyDetails(saved.getCompanyDetails());
+        response.setStatus(saved.getStatus());
+        response.setPassword(null);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Delete client by clientID (called when admin rejects a client application or removes a client).
+     * Deletes the client record from ClientDB and removes user credentials from UserDB.
+     */
+    @DeleteMapping("/{clientId}")
+    public ResponseEntity<?> deleteClient(@PathVariable Long clientId) {
+        Optional<ClientDB> clientOptional = clientRepo.findById(clientId);
+        if (clientOptional.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new AuthResponse(false, "Client with ID " + clientId + " not found."));
+        }
+
+        ClientDB client = clientOptional.get();
+
+        // 1. Delete associated credentials from UserDB so the account cannot log in
+        if (client.getEmail() != null) {
+            userRepo.findByEmail(client.getEmail()).ifPresent(userRepo::delete);
+        }
+
+        // 2. Permanently delete client from ClientDB
+        clientRepo.delete(client);
+
+        return ResponseEntity.ok(new AuthResponse(true, "Client registration has been rejected and permanently deleted."));
+    }
+
+    /**
+     * Admin reject endpoint alias: permanently removes the client.
+     */
+    @PutMapping("/{clientId}/reject")
+    public ResponseEntity<?> rejectClient(@PathVariable Long clientId) {
+        return deleteClient(clientId);
     }
 }
