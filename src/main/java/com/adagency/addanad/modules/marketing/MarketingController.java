@@ -11,11 +11,12 @@ import java.util.Optional;
 
 /**
  * REST Controller for the Marketing module.
- * Displays campaign progress, tracks audience views, visible dates,
- * and maintains client-analysis connections.
+ * Displays campaign analytics, tracks audience views and clicks automatically,
+ * and maintains client-campaign-analysis connections.
  */
 @RestController
 @RequestMapping("/api/marketing")
+@CrossOrigin(origins = "*")
 public class MarketingController {
 
     @Autowired
@@ -23,7 +24,8 @@ public class MarketingController {
 
     /**
      * Create a new campaign analysis record for a client.
-     * Connects client_id with analysis_id to track campaign views, visible dates, and progress.
+     * Connects client_id with analysis_id and campaign_id.
+     * Views and clicks automatically default to 0 for authentic tracking.
      */
     @PostMapping("/analysis/create")
     public ResponseEntity<?> createAnalysis(@RequestBody CampaignAnalysisDB analysis) {
@@ -32,8 +34,12 @@ public class MarketingController {
                     .body("client_id is required to connect client with analysis.");
         }
 
+        // Initialize views and clicks to 0 if not provided
         if (analysis.getCampaignViews() == null) {
             analysis.setCampaignViews(0L);
+        }
+        if (analysis.getClicks() == null) {
+            analysis.setClicks(0L);
         }
 
         CampaignAnalysisDB saved = campaignAnalysisRepo.save(analysis);
@@ -41,7 +47,7 @@ public class MarketingController {
     }
 
     /**
-     * Retrieve all campaign analysis and progress records allocated for a specific client.
+     * Retrieve all campaign analysis records allocated for a specific client.
      */
     @GetMapping("/analysis/client/{clientId}")
     public ResponseEntity<?> getAnalysisByClientId(@PathVariable Long clientId) {
@@ -73,7 +79,6 @@ public class MarketingController {
 
     /**
      * Retrieve all campaign analysis records across the platform.
-     * Accessible by Marketing Analysts and Admins.
      */
     @GetMapping("/analysis/all")
     public List<CampaignAnalysisDB> getAllAnalyses() {
@@ -81,7 +86,7 @@ public class MarketingController {
     }
 
     /**
-     * Update campaign progress, views, visible dates, or analyst remarks.
+     * Update campaign dates, progress status, or analyst remarks.
      */
     @PutMapping("/analysis/{analysisId}")
     public ResponseEntity<?> updateAnalysis(
@@ -123,7 +128,7 @@ public class MarketingController {
     }
 
     /**
-     * Increment campaign views count by 1 (or custom amount), simulating live ad views.
+     * Increment campaign views count by 1 (or custom count) by analysisId.
      */
     @PutMapping("/analysis/{analysisId}/increment-views")
     public ResponseEntity<?> incrementViews(
@@ -145,6 +150,117 @@ public class MarketingController {
                 "analysisId", saved.getAnalysisId(),
                 "campaignName", saved.getCampaignName(),
                 "updatedCampaignViews", saved.getCampaignViews()
+        ));
+    }
+
+    /**
+     * Increment campaign clicks count by 1 (or custom count) by analysisId.
+     * Automatically triggered when an external user clicks on a campaign.
+     */
+    @PutMapping("/analysis/{analysisId}/increment-clicks")
+    public ResponseEntity<?> incrementClicks(
+            @PathVariable Long analysisId,
+            @RequestParam(required = false, defaultValue = "1") Long count) {
+
+        Optional<CampaignAnalysisDB> analysisOptional = campaignAnalysisRepo.findById(analysisId);
+        if (analysisOptional.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Campaign analysis with ID " + analysisId + " not found.");
+        }
+
+        CampaignAnalysisDB analysis = analysisOptional.get();
+        long currentClicks = analysis.getClicks() != null ? analysis.getClicks() : 0L;
+        analysis.setClicks(currentClicks + (count != null ? count : 1L));
+
+        CampaignAnalysisDB saved = campaignAnalysisRepo.save(analysis);
+        return ResponseEntity.ok(Map.of(
+                "analysisId", saved.getAnalysisId(),
+                "campaignName", saved.getCampaignName(),
+                "updatedClicks", saved.getClicks()
+        ));
+    }
+
+    /**
+     * Increment views by campaignId.
+     * Triggered when an external user loads or views a campaign in the marketplace.
+     */
+    @PutMapping("/analysis/campaign/{campaignId}/increment-views")
+    public ResponseEntity<?> incrementViewsByCampaignId(
+            @PathVariable Long campaignId,
+            @RequestParam(required = false, defaultValue = "1") Long count) {
+
+        List<CampaignAnalysisDB> analysisList = campaignAnalysisRepo.findByCampaignId(campaignId);
+        if (analysisList.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No campaign analysis found for campaign ID " + campaignId);
+        }
+
+        long incrementBy = (count != null ? count : 1L);
+        for (CampaignAnalysisDB analysis : analysisList) {
+            long currentViews = analysis.getCampaignViews() != null ? analysis.getCampaignViews() : 0L;
+            analysis.setCampaignViews(currentViews + incrementBy);
+            campaignAnalysisRepo.save(analysis);
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "campaignId", campaignId,
+                "message", "Campaign views incremented successfully.",
+                "updatedRecords", analysisList.size()
+        ));
+    }
+
+    /**
+     * Increment clicks by campaignId.
+     * Triggered when an external user clicks on a campaign in the marketplace.
+     */
+    @PutMapping("/analysis/campaign/{campaignId}/increment-clicks")
+    public ResponseEntity<?> incrementClicksByCampaignId(
+            @PathVariable Long campaignId,
+            @RequestParam(required = false, defaultValue = "1") Long count) {
+
+        List<CampaignAnalysisDB> analysisList = campaignAnalysisRepo.findByCampaignId(campaignId);
+        if (analysisList.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No campaign analysis found for campaign ID " + campaignId);
+        }
+
+        long incrementBy = (count != null ? count : 1L);
+        for (CampaignAnalysisDB analysis : analysisList) {
+            long currentClicks = analysis.getClicks() != null ? analysis.getClicks() : 0L;
+            analysis.setClicks(currentClicks + incrementBy);
+            campaignAnalysisRepo.save(analysis);
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "campaignId", campaignId,
+                "message", "Campaign clicks incremented successfully.",
+                "updatedRecords", analysisList.size()
+        ));
+    }
+
+    /**
+     * Unified external visitor click handler:
+     * Increments both Views and Clicks atomically when an external user clicks on a campaign.
+     */
+    @PutMapping("/analysis/campaign/{campaignId}/click")
+    public ResponseEntity<?> recordCampaignClick(@PathVariable Long campaignId) {
+        List<CampaignAnalysisDB> analysisList = campaignAnalysisRepo.findByCampaignId(campaignId);
+        if (analysisList.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No campaign analysis found for campaign ID " + campaignId);
+        }
+
+        for (CampaignAnalysisDB analysis : analysisList) {
+            long views = analysis.getCampaignViews() != null ? analysis.getCampaignViews() : 0L;
+            long clicks = analysis.getClicks() != null ? analysis.getClicks() : 0L;
+            analysis.setCampaignViews(views + 1L);
+            analysis.setClicks(clicks + 1L);
+            campaignAnalysisRepo.save(analysis);
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "campaignId", campaignId,
+                "message", "Campaign view and click recorded successfully in database."
         ));
     }
 
