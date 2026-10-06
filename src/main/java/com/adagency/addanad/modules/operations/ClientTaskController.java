@@ -15,6 +15,7 @@ import java.util.Optional;
 /**
  * Controller for Client-facing Task operations.
  * Allows registered clients to give / submit advertising tasks to the agency,
+ * edit tasks before they are assigned to an employee by admin/coordinator,
  * view the progress of their submitted tasks, and track coordination by the Task Coordinator.
  */
 @RestController
@@ -74,9 +75,92 @@ public class ClientTaskController {
     }
 
     /**
+     * Client edits their created task before admin/coordinator assigns it to an employee.
+     * If the task is already assigned to an employee or in progress/completed/cancelled, editing is prohibited.
+     *
+     * Example: PUT /api/client_tasks/{taskId} or PUT /api/client_tasks/{taskId}/update
+     */
+    @PutMapping({"/{taskId}", "/{taskId}/update", "/update/{taskId}"})
+    public ResponseEntity<?> updateTask(
+            @PathVariable Long taskId,
+            @RequestBody ClientTaskRequest request) {
+
+        Optional<TaskDB> taskOpt = taskRepo.findById(taskId);
+        if (taskOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Task with ID " + taskId + " not found.");
+        }
+
+        TaskDB task = taskOpt.get();
+
+        // Prevent edit if already assigned to an employee
+        if (task.getEmployeeId() != null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot edit task: It has already been assigned to an employee (" +
+                            (task.getEmployeeName() != null ? task.getEmployeeName() : "ID: " + task.getEmployeeId()) + ").");
+        }
+
+        // Prevent edit if status indicates assignment or completion/cancellation
+        String status = task.getStatus() != null ? task.getStatus().toUpperCase() : "";
+        if ("ASSIGNED".equals(status) || "IN PROGRESS".equals(status) || "TO DO".equals(status)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot edit task: The task has already entered coordination or has been assigned.");
+        }
+        if ("COMPLETED".equals(status)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot edit task: It has already been completed.");
+        }
+        if ("CANCELLED".equals(status)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot edit task: It has been cancelled.");
+        }
+
+        // Validate client ownership if clientId provided
+        if (request.getClientId() != null && task.getClientId() != null &&
+                !task.getClientId().equals(request.getClientId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You do not have permission to edit this task.");
+        }
+
+        // Validate title and details if provided
+        if (request.getTaskTitle() != null) {
+            if (request.getTaskTitle().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Task title cannot be empty.");
+            }
+            task.setTaskTitle(request.getTaskTitle().trim());
+        }
+
+        if (request.getTaskDetails() != null) {
+            if (request.getTaskDetails().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Task details cannot be empty.");
+            }
+            task.setTaskDetails(request.getTaskDetails().trim());
+        }
+
+        if (request.getTaskCategory() != null && !request.getTaskCategory().trim().isEmpty()) {
+            task.setTaskCategory(request.getTaskCategory().trim());
+        }
+
+        if (request.getPriority() != null && !request.getPriority().trim().isEmpty()) {
+            task.setPriority(request.getPriority().trim());
+        }
+
+        if (request.getCampaignId() != null) {
+            task.setCampaignId(request.getCampaignId());
+        }
+
+        task.setClientDeadline(request.getClientDeadline());
+
+        TaskDB saved = taskRepo.save(task);
+        return ResponseEntity.ok(saved);
+    }
+
+    /**
      * Retrieve all tasks given/submitted by a specific client.
      *
-     * Example: GET /api/client_tasks/client/1
+     * Example: GET /api/client_tasks/client/{clientId}
      */
     @GetMapping("/client/{clientId}")
     public List<TaskDB> getTasksByClient(@PathVariable Long clientId) {
@@ -86,7 +170,7 @@ public class ClientTaskController {
     /**
      * Retrieve all tasks submitted by a client filtered by status.
      *
-     * Example: GET /api/client_tasks/client/1/status/Completed
+     * Example: GET /api/client_tasks/client/{clientId}/status/{status}
      */
     @GetMapping("/client/{clientId}/status/{status}")
     public List<TaskDB> getTasksByClientAndStatus(@PathVariable Long clientId, @PathVariable String status) {
@@ -96,7 +180,7 @@ public class ClientTaskController {
     /**
      * View details and current progress of a specific task submitted by a client.
      *
-     * Example: GET /api/client_tasks/5
+     * Example: GET /api/client_tasks/{taskId}
      */
     @GetMapping("/{taskId}")
     public ResponseEntity<?> getTaskDetails(@PathVariable Long taskId) {
@@ -111,7 +195,7 @@ public class ClientTaskController {
     /**
      * Client cancels a task if it has not yet been completed.
      *
-     * Example: PUT /api/client_tasks/5/cancel
+     * Example: PUT /api/client_tasks/{taskId}/cancel
      */
     @PutMapping("/{taskId}/cancel")
     public ResponseEntity<?> cancelTask(@PathVariable Long taskId) {

@@ -18,6 +18,9 @@ public class ClientChatController {
     @Autowired
     private ClientChatRepo clientChatRepo;
 
+    @Autowired
+    private AdminChatRepo adminChatRepo;
+
     //Client sends msg with unique ID
     @PostMapping({"/{clientId}/send"})
     public ClientChatDB sendClientMessage(@PathVariable Long clientId, @RequestBody ClientChatDB chat) {
@@ -29,6 +32,12 @@ public class ClientChatController {
     @GetMapping({ "/{clientId}/messages"})
     public List<ClientChatDB> getClientMessages(@PathVariable Long clientId) {
         return clientChatRepo.findByClientID(clientId);
+    }
+
+    //View all admin messages sent to this client
+    @GetMapping({"/{clientId}/admin_messages", "/{clientId}/admin-messages"})
+    public List<AdminChatDB> getAdminMessagesForClient(@PathVariable Long clientId) {
+        return adminChatRepo.findByClientID(clientId);
     }
 
     //Client's sent message update

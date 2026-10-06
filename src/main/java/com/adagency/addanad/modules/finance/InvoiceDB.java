@@ -22,6 +22,10 @@ public class InvoiceDB {
     @Column(name = "client_id", nullable = false)
     private Long clientId;
 
+    // Client company name for clear business identification
+    @Column(name = "company_name")
+    private String companyName;
+
     // Optional reference to the specific campaign this charge originates from
     @Column(name = "campaign_id")
     private Long campaignId;
@@ -63,6 +67,17 @@ public class InvoiceDB {
         this.createdAt = LocalDateTime.now();
     }
 
+    public InvoiceDB(Long clientId, String companyName, Long campaignId, String chargedCategory, Double categoryPrice, String clientDescription) {
+        this.clientId = clientId;
+        this.companyName = companyName;
+        this.campaignId = campaignId;
+        this.chargedCategory = chargedCategory;
+        this.categoryPrice = categoryPrice;
+        this.clientDescription = clientDescription;
+        this.paymentStatus = "PENDING";
+        this.createdAt = LocalDateTime.now();
+    }
+
     @PrePersist
     protected void onCreate() {
         if (this.createdAt == null) {
@@ -85,6 +100,14 @@ public class InvoiceDB {
 
     public void setClientId(Long clientId) {
         this.clientId = clientId;
+    }
+
+    public String getCompanyName() {
+        return companyName;
+    }
+
+    public void setCompanyName(String companyName) {
+        this.companyName = companyName;
     }
 
     public Long getCampaignId() {

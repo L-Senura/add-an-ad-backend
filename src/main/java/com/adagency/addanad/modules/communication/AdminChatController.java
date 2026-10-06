@@ -24,6 +24,12 @@ public class AdminChatController {
         return clientChatRepo.findByClientID(clientId);
     }
 
+    //View all admin messages sent to a specific client
+    @GetMapping({"/to_client/{clientId}", "/client/{clientId}/messages"})
+    public List<AdminChatDB> getAdminMessagesToClient(@PathVariable Long clientId) {
+        return adminChatRepo.findByClientID(clientId);
+    }
+
     //Admin sends a msg to client
     @PostMapping({"/{adminId}/send/{clientId}"})
     public AdminChatDB sendAdminMessageToClient(
