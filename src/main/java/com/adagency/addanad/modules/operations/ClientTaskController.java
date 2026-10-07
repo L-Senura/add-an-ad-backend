@@ -22,6 +22,7 @@ import java.util.Optional;
  */
 @RestController
 @RequestMapping("/api/client_tasks")
+@CrossOrigin(origins = "*")
 public class ClientTaskController {
 
     @Autowired
@@ -105,12 +106,8 @@ public class ClientTaskController {
                             (task.getEmployeeName() != null ? task.getEmployeeName() : "ID: " + task.getEmployeeId()) + ").");
         }
 
-        // Prevent edit if status indicates assignment or completion/cancellation
-        String status = task.getStatus() != null ? task.getStatus().toUpperCase() : "";
-        if ("ASSIGNED".equals(status) || "IN PROGRESS".equals(status) || "TO DO".equals(status)) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("Cannot edit task: The task has already entered coordination or has been assigned.");
-        }
+        // Prevent edit if status indicates completion or cancellation
+        String status = task.getStatus() != null ? task.getStatus().toUpperCase().trim() : "";
         if ("COMPLETED".equals(status)) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Cannot edit task: It has already been completed.");
@@ -203,10 +200,7 @@ public class ClientTaskController {
      *
      * Example: DELETE /api/client_tasks/{taskId} or DELETE /api/client_tasks/{taskId}/cancel or PUT /api/client_tasks/{taskId}/cancel
      */
-    @RequestMapping(
-            value = {"/{taskId}", "/{taskId}/cancel", "/delete/{taskId}", "/cancel/{taskId}"},
-            method = {RequestMethod.DELETE, RequestMethod.PUT}
-    )
+    @DeleteMapping({"/{taskId}", "/{taskId}/cancel", "/delete/{taskId}", "/cancel/{taskId}"})
     public ResponseEntity<?> cancelTask(@PathVariable Long taskId) {
         Optional<TaskDB> taskOpt = taskRepo.findById(taskId);
         if (taskOpt.isEmpty()) {
@@ -235,5 +229,14 @@ public class ClientTaskController {
         response.put("message", "Task with ID " + taskId + " has been cancelled and permanently deleted from the database.");
         response.put("taskId", taskId);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Client cancels a task via PUT method (backward compatibility for /cancel endpoints).
+     * Note: /{taskId} without /cancel is reserved exclusively for updateTask.
+     */
+    @PutMapping({"/{taskId}/cancel", "/cancel/{taskId}"})
+    public ResponseEntity<?> cancelTaskViaPut(@PathVariable Long taskId) {
+        return cancelTask(taskId);
     }
 }

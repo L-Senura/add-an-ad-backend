@@ -16,6 +16,7 @@ import java.util.Optional;
  */
 @RestController
 @RequestMapping("/api/employee_tasks")
+@CrossOrigin(origins = "*")
 public class TaskTrackingController {
 
     @Autowired

@@ -1,14 +1,16 @@
 package com.adagency.addanad.modules.operations;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 
 /**
  * Entity representing an Employee / Production Staff member in the Operations module.
  * The Task Coordinator inspects employee availability, role/specialization,
- * and current workload when coordinating tasks given by clients.
+ * department, and current workload when coordinating tasks given by clients.
  */
 @Entity
 @Table(name = "ProductionStaffDB")
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ProductionStaffDB {
 
     @Id
@@ -30,6 +32,10 @@ public class ProductionStaffDB {
     // Staff role or specialization (e.g. "Graphic Designer", "Video Editor", "Content Writer", "Web Developer")
     @Column(name = "role")
     private String role;
+
+    // Department name (e.g. "Creative and Visual Design", "Video Production and Animation")
+    @Column(name = "department")
+    private String department = "Production Team";
 
     // Employee contact number
     @Column(name = "contactNumber")
@@ -55,10 +61,22 @@ public class ProductionStaffDB {
         this.name = name;
         this.email = email;
         this.role = role;
+        this.department = "Production Team";
         this.contactNumber = contactNumber;
         this.currentWorkload = 0;
         this.maxWorkload = 5;
         this.status = "AVAILABLE";
+    }
+
+    public ProductionStaffDB(String name, String email, String role, String department, String contactNumber, int currentWorkload, int maxWorkload, String status) {
+        this.name = name;
+        this.email = email;
+        this.role = role;
+        this.department = department != null ? department : "Production Team";
+        this.contactNumber = contactNumber;
+        this.currentWorkload = currentWorkload;
+        this.maxWorkload = maxWorkload > 0 ? maxWorkload : 5;
+        this.status = status != null ? status : "AVAILABLE";
     }
 
     // Workload helper methods
@@ -117,6 +135,14 @@ public class ProductionStaffDB {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(String department) {
+        this.department = department;
     }
 
     public String getContactNumber() {

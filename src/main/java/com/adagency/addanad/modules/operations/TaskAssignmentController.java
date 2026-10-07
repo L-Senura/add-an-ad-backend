@@ -17,6 +17,7 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/api/coordinator_tasks")
+@CrossOrigin(origins = "*")
 public class TaskAssignmentController {
 
     @Autowired
