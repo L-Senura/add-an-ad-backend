@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -26,6 +27,9 @@ class ClientTaskControllerTest {
 
     @Mock
     private ClientRepo clientRepo;
+
+    @Mock
+    private ProductionStaffRepo productionStaffRepo;
 
     @InjectMocks
     private ClientTaskController clientTaskController;
@@ -139,5 +143,59 @@ class ClientTaskControllerTest {
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         verify(taskRepo, never()).save(any());
+    }
+
+    @Test
+    void cancelTask_Success_DeletesRecordFromDatabase() {
+        when(taskRepo.findById(100L)).thenReturn(Optional.of(unassignedTask));
+
+        ResponseEntity<?> response = clientTaskController.cancelTask(100L);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody() instanceof Map);
+        Map<?, ?> map = (Map<?, ?>) response.getBody();
+        assertEquals(true, map.get("success"));
+        assertTrue(map.get("message").toString().contains("deleted from the database"));
+        verify(taskRepo, times(1)).delete(unassignedTask);
+    }
+
+    @Test
+    void cancelTask_Success_DecrementsEmployeeWorkloadWhenAssigned() {
+        ProductionStaffDB staff = new ProductionStaffDB();
+        staff.setId(2L);
+        staff.setCurrentWorkload(3);
+
+        when(taskRepo.findById(200L)).thenReturn(Optional.of(assignedTask));
+        when(productionStaffRepo.findById(2L)).thenReturn(Optional.of(staff));
+
+        ResponseEntity<?> response = clientTaskController.cancelTask(200L);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(2, staff.getCurrentWorkload());
+        verify(productionStaffRepo, times(1)).save(staff);
+        verify(taskRepo, times(1)).delete(assignedTask);
+    }
+
+    @Test
+    void cancelTask_Fails_WhenCompleted() {
+        unassignedTask.setStatus("Completed");
+        when(taskRepo.findById(100L)).thenReturn(Optional.of(unassignedTask));
+
+        ResponseEntity<?> response = clientTaskController.cancelTask(100L);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertTrue(response.getBody().toString().contains("already been completed"));
+        verify(taskRepo, never()).delete(any());
+    }
+
+    @Test
+    void cancelTask_Fails_WhenNotFound() {
+        when(taskRepo.findById(999L)).thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = clientTaskController.cancelTask(999L);
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        verify(taskRepo, never()).delete(any());
     }
 }
