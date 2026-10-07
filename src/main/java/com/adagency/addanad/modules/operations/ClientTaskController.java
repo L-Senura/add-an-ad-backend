@@ -9,7 +9,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -27,6 +29,9 @@ public class ClientTaskController {
 
     @Autowired(required = false)
     private ClientRepo clientRepo;
+
+    @Autowired(required = false)
+    private ProductionStaffRepo productionStaffRepo;
 
     /**
      * Client gives / submits a new task to the agency.
@@ -193,11 +198,15 @@ public class ClientTaskController {
     }
 
     /**
-     * Client cancels a task if it has not yet been completed.
+     * Client cancels / deletes a task from the database.
+     * Permanently deletes the task record from the DB, decrementing employee workload if assigned.
      *
-     * Example: PUT /api/client_tasks/{taskId}/cancel
+     * Example: DELETE /api/client_tasks/{taskId} or DELETE /api/client_tasks/{taskId}/cancel or PUT /api/client_tasks/{taskId}/cancel
      */
-    @PutMapping("/{taskId}/cancel")
+    @RequestMapping(
+            value = {"/{taskId}", "/{taskId}/cancel", "/delete/{taskId}", "/cancel/{taskId}"},
+            method = {RequestMethod.DELETE, RequestMethod.PUT}
+    )
     public ResponseEntity<?> cancelTask(@PathVariable Long taskId) {
         Optional<TaskDB> taskOpt = taskRepo.findById(taskId);
         if (taskOpt.isEmpty()) {
@@ -209,8 +218,22 @@ public class ClientTaskController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Cannot cancel a task that has already been completed.");
         }
-        task.setStatus("Cancelled");
-        TaskDB saved = taskRepo.save(task);
-        return ResponseEntity.ok(saved);
+
+        // If the task was assigned to an employee and not completed, decrement employee workload
+        if (task.getEmployeeId() != null && productionStaffRepo != null) {
+            productionStaffRepo.findById(task.getEmployeeId()).ifPresent(emp -> {
+                emp.decrementWorkload();
+                productionStaffRepo.save(emp);
+            });
+        }
+
+        // Permanently delete the task from the database
+        taskRepo.delete(task);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("success", true);
+        response.put("message", "Task with ID " + taskId + " has been cancelled and permanently deleted from the database.");
+        response.put("taskId", taskId);
+        return ResponseEntity.ok(response);
     }
 }

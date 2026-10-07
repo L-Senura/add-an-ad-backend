@@ -306,4 +306,31 @@ public class TaskAssignmentController {
     public TaskDB trackTaskProgress(@PathVariable Long taskId) {
         return taskRepo.findById(taskId).orElse(null);
     }
+
+    /**
+     * Coordinator deletes / cancels a task from the database.
+     * Permanently deletes the task record from the DB and decrements assigned employee workload if needed.
+     *
+     * Example: DELETE /api/coordinator_tasks/{taskId}
+     */
+    @DeleteMapping({"/{taskId}", "/{taskId}/delete", "/{taskId}/cancel"})
+    public ResponseEntity<?> deleteTask(@PathVariable Long taskId) {
+        Optional<TaskDB> taskOpt = taskRepo.findById(taskId);
+        if (taskOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Task with ID " + taskId + " not found.");
+        }
+        TaskDB task = taskOpt.get();
+        if (task.getEmployeeId() != null && !"Completed".equalsIgnoreCase(task.getStatus())) {
+            productionStaffRepo.findById(task.getEmployeeId()).ifPresent(emp -> {
+                emp.decrementWorkload();
+                productionStaffRepo.save(emp);
+            });
+        }
+        taskRepo.delete(task);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("success", true);
+        response.put("message", "Task with ID " + taskId + " has been permanently deleted from the database.");
+        response.put("taskId", taskId);
+        return ResponseEntity.ok(response);
+    }
 }
